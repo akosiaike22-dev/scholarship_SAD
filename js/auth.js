@@ -52,6 +52,11 @@
     const isLoginPage = window.location.pathname.endsWith('login.html');
     const user = getCurrentUser();
 
+    if (!isLoginPage && !user) {
+      window.location.replace('login.html');
+      return;
+    }
+
     // User label in topbar
     const userLabel = document.querySelector('#user-label');
     if (userLabel && user) {

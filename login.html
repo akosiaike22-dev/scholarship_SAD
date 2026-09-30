@@ -10,61 +10,29 @@
   <script defer src="js/auth.js"></script>
 </head>
 <body class="login-page">
-  <main class="login-panel" style="max-width: 440px;">
+  <main class="login-panel" style="max-width: 400px;">
     <a class="brand" href="login.html">ScholarTrack</a>
     <p class="eyebrow">SCHOLARSHIP OFFICE</p>
     <h1>Sign in</h1>
-    <p class="muted">Use your authorized staff, admin, or scholar account.</p>
+    <p class="muted">Enter your account credentials to access the compliance portal.</p>
+
+    <!-- Role Quick Selector -->
+    <div style="display: flex; gap: 6px; margin: 14px 0 6px 0;">
+      <button type="button" class="button secondary" style="flex: 1; padding: 5px 8px; font-size: 11px;" onclick="selectRole('staff')">Staff</button>
+      <button type="button" class="button secondary" style="flex: 1; padding: 5px 8px; font-size: 11px;" onclick="selectRole('admin')">Admin</button>
+      <button type="button" class="button secondary" style="flex: 1; padding: 5px 8px; font-size: 11px;" onclick="selectRole('scholar')">Scholar</button>
+    </div>
 
     <form id="login-form">
       <label>Email
-        <input name="email" type="email" autocomplete="username" value="staff@scholarship.edu" required>
+        <input name="email" id="loginEmail" type="email" autocomplete="username" value="staff@scholarship.edu" required>
       </label>
       <label>Password
-        <input name="password" type="password" autocomplete="current-password" value="password123" required>
+        <input name="password" id="loginPassword" type="password" autocomplete="current-password" value="password123" required>
       </label>
-      <button class="button primary full" type="submit">Sign in</button>
+      <button class="button primary full" type="submit" style="margin-top: 6px;">Sign in</button>
       <p id="login-message" class="message" role="alert"></p>
     </form>
-
-    <!-- Teacher & Evaluator Quick Guide Box -->
-    <div style="margin-top: 18px; padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px;">
-      <p style="font-weight: 700; color: #0f172a; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-        <span>📋</span> Quick Guide for Instructor / Demo Accounts:
-      </p>
-
-      <div style="display: flex; flex-direction: column; gap: 8px;">
-        <!-- Staff -->
-        <div style="background: #ffffff; padding: 8px 10px; border-radius: 4px; border: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <strong style="color: #1d4ed8;">Staff Account:</strong><br>
-            Email: <code>staff@scholarship.edu</code><br>
-            Password: <code>password123</code>
-          </div>
-          <button type="button" class="button secondary" style="padding: 4px 8px; font-size: 11px;" onclick="fillLogin('staff@scholarship.edu', 'password123')">Auto-fill</button>
-        </div>
-
-        <!-- Admin -->
-        <div style="background: #ffffff; padding: 8px 10px; border-radius: 4px; border: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <strong style="color: #0f172a;">Administrator:</strong><br>
-            Email: <code>admin@scholarship.edu</code><br>
-            Password: <code>password123</code>
-          </div>
-          <button type="button" class="button secondary" style="padding: 4px 8px; font-size: 11px;" onclick="fillLogin('admin@scholarship.edu', 'password123')">Auto-fill</button>
-        </div>
-
-        <!-- Scholar -->
-        <div style="background: #ffffff; padding: 8px 10px; border-radius: 4px; border: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <strong style="color: #15803d;">Scholar:</strong><br>
-            Email: <code>scholar@scholarship.edu</code><br>
-            Password: <code>password123</code>
-          </div>
-          <button type="button" class="button secondary" style="padding: 4px 8px; font-size: 11px;" onclick="fillLogin('scholar@scholarship.edu', 'password123')">Auto-fill</button>
-        </div>
-      </div>
-    </div>
 
     <details style="margin-top: 14px;">
       <summary>Need an account?</summary>
@@ -79,12 +47,17 @@
   </main>
 
   <script>
-    function fillLogin(email, pwd) {
-      const form = document.querySelector('#login-form');
-      if (form) {
-        form.elements.email.value = email;
-        form.elements.password.value = pwd;
+    function selectRole(role) {
+      const emailInput = document.getElementById('loginEmail');
+      const passInput = document.getElementById('loginPassword');
+      if (role === 'staff') {
+        emailInput.value = 'staff@scholarship.edu';
+      } else if (role === 'admin') {
+        emailInput.value = 'admin@scholarship.edu';
+      } else if (role === 'scholar') {
+        emailInput.value = 'scholar@scholarship.edu';
       }
+      passInput.value = 'password123';
     }
   </script>
 </body>

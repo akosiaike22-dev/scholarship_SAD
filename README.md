@@ -6,8 +6,8 @@
 
 ## 1. Project URLs
 
-- **GitHub Repository URL:** https://github.com/aadorador123/scholarship_SAD
-- **Live Deployed System URL:** https://aadorador123.github.io/scholarship_SAD/
+- **GitHub Repository URL:** https://github.com/akosiaike22-dev/scholarship_SAD
+- **Live Deployed System URL:** https://akosiaike22-dev.github.io/scholarship_SAD/
 
 ---
 

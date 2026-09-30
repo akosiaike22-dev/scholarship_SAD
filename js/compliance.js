@@ -1,158 +1,95 @@
-// Academic Compliance Evaluation Engine Module
+// Academic Compliance Results Module for ScholarTrack
 
-window.ComplianceModule = {
-  async init() {
-    this.bindEvents();
-    this.renderTable();
-  },
+(() => {
+  let records = [];
+  let programs = [];
 
-  /**
-   * Evaluates a submission against its scholar's assigned scholarship program rules
-   * Business Rules implemented: BR-02, BR-05, BR-06, BR-07
-   * 
-   * Rule Logic:
-   * Philippine Grading System: 1.00 is highest, 3.00 is passing.
-   * GWA satisfies program when: submitted_gwa <= required_gwa.
-   * Units satisfy program when: units_enrolled >= min_units.
-   * Failing grades: if allow_failing_grade is false, failed_subjects must be 0.
-   * Incompletes: incomplete_subjects must be 0 (BR-06).
-   */
-  evaluateSingleSubmission(submission, overrides = {}) {
-    const scholars = window.ScholarsModule?.scholars || [];
-    const programs = window.ProgramsModule?.programs || [];
+  const escapeHtml = (val) => String(val ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-    const scholar = scholars.find(s => s.id === Number(submission.scholar_id));
-    if (!scholar) {
-      return { evaluation_status: 'None', deficiency_reasons: 'Scholar record not found' };
+  const badgeClass = (status, result) => {
+    if (result === 'With Deficiency') return 'deficiency';
+    if (result === 'Compliant' || status === 'Verified') return 'compliant';
+    return status.toLowerCase();
+  };
+
+  async function loadData() {
+    // 1. Load programs
+    const { data: progs } = await window.db.from('scholarship_programs').select('*').order('program_name');
+    programs = progs || [];
+
+    const progFilter = document.querySelector('#compliance-program-filter');
+    if (progFilter) {
+      const cur = progFilter.value;
+      progFilter.innerHTML = '<option value="">All programs</option>' + programs.map(p => `<option value="${p.id}">${escapeHtml(p.program_name)}</option>`).join('');
+      progFilter.value = cur;
     }
 
-    const program = programs.find(p => p.id === Number(scholar.scholarship_id));
-    if (!program) {
-      return { 
-        evaluation_status: 'With Deficiency', 
-        deficiency_reasons: 'No active scholarship program assigned to scholar.' 
-      };
-    }
+    // 2. Load verified submissions with scholars and programs
+    const { data: subs, error } = await window.db.from('grade_submissions').select('*,scholars(*,scholarship_programs(*))').order('submitted_at', { ascending: false });
 
-    const subStatus = overrides.submission_status || submission.submission_status;
-    if (subStatus !== 'Verified') {
-      return { 
-        evaluation_status: 'None', 
-        deficiency_reasons: 'Submission is pending verification.' 
-      };
-    }
-
-    const deficiencies = [];
-    const gwa = Number(submission.gwa);
-    const reqGwa = Number(program.required_gwa);
-    const units = Number(submission.units_enrolled);
-    const minUnits = Number(program.min_units);
-    const failed = Number(submission.failed_subjects || 0);
-    const inc = Number(submission.incomplete_subjects || 0);
-
-    // 1. GWA Check (Philippine scale: 1.00 is highest, 5.00 is failed)
-    if (gwa > reqGwa) {
-      deficiencies.push(`GWA of ${gwa.toFixed(2)} exceeds maximum required threshold of ${reqGwa.toFixed(2)}`);
-    }
-
-    // 2. Units Enrolled Check
-    if (units < minUnits) {
-      deficiencies.push(`Enrolled units (${units}) below required minimum (${minUnits} units)`);
-    }
-
-    // 3. Failed Subjects Policy Check
-    if (!program.allow_failing_grade && failed > 0) {
-      deficiencies.push(`Has ${failed} failed subject(s); failing grades not permitted by scholarship`);
-    }
-
-    // 4. Incomplete Subjects Check (BR-06: cannot be compliant with incomplete requirements)
-    if (inc > 0) {
-      deficiencies.push(`Has ${inc} incomplete (INC) subject(s) requiring resolution`);
-    }
-
-    if (deficiencies.length === 0) {
-      return {
-        evaluation_status: 'Compliant',
-        deficiency_reasons: ''
-      };
-    } else {
-      return {
-        evaluation_status: 'With Deficiency',
-        deficiency_reasons: deficiencies.join('; ')
-      };
-    }
-  },
-
-  async reevaluateAllVerified() {
-    const submissions = await window.DB.getSubmissions();
-    const verifiedSubs = submissions.filter(s => s.submission_status === 'Verified');
-    
-    let count = 0;
-    for (const sub of verifiedSubs) {
-      const result = this.evaluateSingleSubmission(sub);
-      await window.DB.updateSubmission(sub.id, {
-        evaluation_status: result.evaluation_status,
-        deficiency_reasons: result.deficiency_reasons
-      });
-      await window.DB.updateScholar(sub.scholar_id, {
-        status: result.evaluation_status
-      });
-      count++;
-    }
-
-    window.App.showAlert(`Successfully re-evaluated ${count} verified submission(s).`, 'success');
-    if (window.SubmissionsModule) await window.SubmissionsModule.loadSubmissions();
-    if (window.ScholarsModule) await window.ScholarsModule.loadScholars();
-    this.renderTable();
-  },
-
-  renderTable() {
-    const tbody = document.getElementById('complianceTableBody');
-    if (!tbody) return;
-
-    const submissions = window.SubmissionsModule?.submissions || [];
-    const verified = submissions.filter(s => s.submission_status === 'Verified');
-
-    if (verified.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No verified submissions found for compliance evaluation.</td></tr>`;
+    if (error) {
+      const msg = document.querySelector('#page-message');
+      if (msg) msg.textContent = error.message;
       return;
     }
 
-    tbody.innerHTML = verified.map(sub => {
-      const scholar = window.ScholarsModule?.scholars?.find(s => s.id === Number(sub.scholar_id));
-      const prog = scholar ? window.ProgramsModule?.programs?.find(p => p.id === Number(scholar.scholarship_id)) : null;
+    records = subs || [];
+    renderTable();
+  }
 
-      const evalStatus = sub.evaluation_status || 'None';
-      const isCompliant = evalStatus === 'Compliant';
+  function renderTable() {
+    const tbody = document.querySelector('#compliance-table');
+    if (!tbody) return;
+
+    const search = (document.querySelector('#compliance-search')?.value || '').toLowerCase().trim();
+    const progId = document.querySelector('#compliance-program-filter')?.value || '';
+    const status = document.querySelector('#compliance-status-filter')?.value || '';
+
+    const filtered = records.filter(item => {
+      const s = item.scholars;
+      if (!s) return false;
+      const matchSearch = !search || s.student_id?.toLowerCase().includes(search) || s.full_name?.toLowerCase().includes(search);
+      const matchProg = !progId || String(s.scholarship_id) === String(progId);
+      const matchStatus = !status || s.status === status || item.compliance_result === status;
+      return matchSearch && matchProg && matchStatus;
+    });
+
+    if (!filtered.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No compliance records found.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filtered.map(item => {
+      const s = item.scholars;
+      const p = programs.find(x => x.id === s.scholarship_id) || s.scholarship_programs;
+      const progName = p ? p.program_name : 'None';
+      const reasons = Array.isArray(item.deficiency_reasons) ? item.deficiency_reasons.join('; ') : (item.deficiency_reasons || '');
 
       return `
         <tr>
-          <td style="font-weight: 600;">${scholar ? scholar.full_name : `Scholar #${sub.scholar_id}`}</td>
-          <td><span style="font-size: 12px; color: var(--text-muted);">${prog ? prog.program_name : 'No Program'}</span></td>
-          <td>${sub.academic_year} (${sub.semester})</td>
+          <td style="font-weight:600;">${escapeHtml(s.student_id)}</td>
+          <td>${escapeHtml(s.full_name)}</td>
+          <td><span style="font-size:12px; color:var(--muted);">${escapeHtml(progName)}</span></td>
+          <td>${escapeHtml(item.academic_year)} · ${escapeHtml(item.semester)}</td>
+          <td><span class="badge ${s.status === 'Compliant' ? 'compliant' : s.status === 'With Deficiency' ? 'deficiency' : 'pending'}">${escapeHtml(s.status)}</span></td>
           <td>
-            GWA: <strong>${Number(sub.gwa).toFixed(2)}</strong> | Units: ${sub.units_enrolled} | Failed: ${sub.failed_subjects} | INC: ${sub.incomplete_subjects}
-          </td>
-          <td>
-            ${prog ? `Req GWA: &le;${Number(prog.required_gwa).toFixed(2)} | Min ${prog.min_units}u | Fail: ${prog.allow_failing_grade ? 'Yes' : 'No'}` : 'N/A'}
-          </td>
-          <td>
-            <span class="badge ${isCompliant ? 'badge-compliant' : 'badge-deficiency'}">
-              ${evalStatus}
+            <span class="badge ${badgeClass(item.submission_status, item.compliance_result)}">
+              ${escapeHtml(item.compliance_result || item.submission_status)}
             </span>
           </td>
           <td>
-            ${sub.deficiency_reasons ? `<span style="font-size: 11px; color: var(--danger);">${sub.deficiency_reasons}</span>` : '<span style="font-size: 11px; color: var(--success);">All criteria satisfied</span>'}
+            ${reasons ? `<span style="font-size:11px; color:var(--danger);">${escapeHtml(reasons)}</span>` : '<span style="font-size:11px; color:var(--success);">All requirements satisfied</span>'}
           </td>
         </tr>
       `;
     }).join('');
-  },
-
-  bindEvents() {
-    const btnReeval = document.getElementById('btnReevaluateAll');
-    if (btnReeval) {
-      btnReeval.addEventListener('click', () => this.reevaluateAllVerified());
-    }
   }
-};
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelector('#refresh-compliance')?.addEventListener('click', loadData);
+    document.querySelector('#compliance-search')?.addEventListener('input', renderTable);
+    document.querySelector('#compliance-program-filter')?.addEventListener('change', renderTable);
+    document.querySelector('#compliance-status-filter')?.addEventListener('change', renderTable);
+    loadData();
+  });
+})();

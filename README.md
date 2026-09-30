@@ -6,8 +6,8 @@
 
 ## 1. Project URLs
 
-- **GitHub Repository URL:** [https://github.com/aadorador123/scholarship-monitoring](https://github.com/aadorador123/scholarship-monitoring)
-- **Live Deployed System URL:** [https://aadorador123.github.io/scholarship-monitoring/](https://aadorador123.github.io/scholarship-monitoring/)
+- **GitHub Repository URL:** https://github.com/aadorador123/scholarship_SAD
+- **Live Deployed System URL:** https://aadorador123.github.io/scholarship_SAD/
 
 ---
 

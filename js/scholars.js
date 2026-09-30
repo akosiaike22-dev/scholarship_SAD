@@ -1,174 +1,198 @@
-// Scholar Records Management Module
+// Scholars Management for ScholarTrack
 
-window.ScholarsModule = {
-  scholars: [],
+(() => {
+  let scholars = [];
+  let programs = [];
 
-  async init() {
-    await this.loadScholars();
-    this.bindEvents();
-  },
+  const escapeHtml = (val) => String(val ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-  async loadScholars() {
-    this.scholars = await window.DB.getScholars();
-    this.renderTable();
-    this.populateSubmissionsSelect();
-    if (window.App) window.App.updateDashboardMetrics();
-  },
+  const STATUS_OPTIONS = [
+    'Active',
+    'Pending Submission',
+    'For Verification',
+    'Compliant',
+    'With Deficiency',
+    'Probationary',
+    'For Renewal',
+    'Renewed',
+    'Disqualified'
+  ];
 
-  populateSubmissionsSelect() {
-    const subSelect = document.getElementById('subScholarSelect');
-    if (subSelect) {
-      subSelect.innerHTML = '<option value="">-- Choose Scholar --</option>' +
-        this.scholars.map(s => `
-          <option value="${s.id}">${s.student_id} - ${s.full_name} (${s.degree_program})</option>
-        `).join('');
+  async function loadData() {
+    // 1. Load scholarship programs for filter and modal select
+    const { data: progsData } = await window.db.from('scholarship_programs').select('*').order('program_name');
+    programs = progsData || [];
+
+    const progFilter = document.querySelector('#scholarship-filter');
+    if (progFilter) {
+      const cur = progFilter.value;
+      progFilter.innerHTML = '<option value="">All programs</option>' + programs.map(p => `<option value="${p.id}">${escapeHtml(p.program_name)}</option>`).join('');
+      progFilter.value = cur;
     }
-  },
 
-  getProgramName(progId) {
-    if (!progId) return 'None Assigned';
-    const prog = window.ProgramsModule?.programs?.find(p => p.id === Number(progId));
-    return prog ? prog.program_name : `Program #${progId}`;
-  },
-
-  getStatusBadgeClass(status) {
-    switch (status) {
-      case 'Compliant': return 'badge-compliant';
-      case 'With Deficiency': return 'badge-deficiency';
-      case 'For Verification':
-      case 'Pending Submission': return 'badge-pending';
-      case 'Active': return 'badge-active';
-      default: return 'badge-inactive';
+    const formProgSelect = document.querySelector('[name="scholarship_id"]');
+    if (formProgSelect) {
+      formProgSelect.innerHTML = '<option value="">Select program</option>' + programs.filter(p => p.active).map(p => `<option value="${p.id}">${escapeHtml(p.program_name)}</option>`).join('');
     }
-  },
 
-  renderTable() {
-    const tbody = document.getElementById('scholarsTableBody');
-    if (!tbody) return;
+    // Status filter & form options
+    const statusFilter = document.querySelector('#status-filter');
+    if (statusFilter && statusFilter.options.length <= 1) {
+      statusFilter.innerHTML = '<option value="">All statuses</option>' + STATUS_OPTIONS.map(s => `<option value="${s}">${s}</option>`).join('');
+    }
 
-    const searchTerm = (document.getElementById('scholarSearchInput')?.value || '').toLowerCase().trim();
-    const progFilter = document.getElementById('scholarProgramFilter')?.value || '';
-    const statusFilter = document.getElementById('scholarStatusFilter')?.value || '';
+    const formStatusSelect = document.querySelector('[name="status"]');
+    if (formStatusSelect && formStatusSelect.options.length === 0) {
+      formStatusSelect.innerHTML = STATUS_OPTIONS.map(s => `<option value="${s}">${s}</option>`).join('');
+    }
 
-    const filtered = this.scholars.filter(s => {
-      const matchSearch = !searchTerm || 
-        s.student_id.toLowerCase().includes(searchTerm) || 
-        s.full_name.toLowerCase().includes(searchTerm);
-      const matchProg = !progFilter || String(s.scholarship_id) === String(progFilter);
-      const matchStatus = !statusFilter || s.status === statusFilter;
-      return matchSearch && matchProg && matchStatus;
-    });
-
-    if (filtered.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No matching scholars found.</td></tr>`;
+    // 2. Load scholars
+    const { data: scData, error } = await window.db.from('scholars').select('*,scholarship_programs(*)').order('full_name');
+    if (error) {
+      const msg = document.querySelector('#page-message');
+      if (msg) msg.textContent = error.message;
       return;
     }
 
-    tbody.innerHTML = filtered.map(s => `
-      <tr>
-        <td style="font-weight: 600;">${s.student_id}</td>
-        <td>${s.full_name}</td>
-        <td>${s.degree_program}</td>
-        <td>${s.year_level}</td>
-        <td><span style="font-size: 12px; color: var(--text-muted);">${this.getProgramName(s.scholarship_id)}</span></td>
-        <td><span class="badge ${this.getStatusBadgeClass(s.status)}">${s.status}</span></td>
-        <td>
-          <button class="btn btn-secondary btn-sm" onclick="window.ScholarsModule.openEditModal(${s.id})">Edit</button>
-        </td>
-      </tr>
-    `).join('');
-  },
+    scholars = scData || [];
+    renderScholars();
+  }
 
-  openAddModal() {
-    const modal = document.getElementById('scholarModal');
-    const form = document.getElementById('scholarForm');
-    document.getElementById('scholarModalTitle').innerText = 'Register New Scholar';
-    document.getElementById('scholarEditId').value = '';
+  function renderScholars() {
+    const tbody = document.querySelector('#scholars-table');
+    if (!tbody) return;
+
+    const search = (document.querySelector('#scholar-search')?.value || '').toLowerCase().trim();
+    const progId = document.querySelector('#scholarship-filter')?.value || '';
+    const status = document.querySelector('#status-filter')?.value || '';
+
+    const filtered = scholars.filter(s => {
+      const matchSearch = !search || s.student_id.toLowerCase().includes(search) || s.full_name.toLowerCase().includes(search);
+      const matchProg = !progId || String(s.scholarship_id) === String(progId);
+      const matchStatus = !status || s.status === status;
+      return matchSearch && matchProg && matchStatus;
+    });
+
+    if (!filtered.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No scholars found.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filtered.map(s => {
+      const p = programs.find(item => item.id === s.scholarship_id) || s.scholarship_programs;
+      const progName = p ? p.program_name : 'None';
+      let badgeCls = 'active';
+      if (s.status === 'Compliant') badgeCls = 'compliant';
+      if (s.status === 'With Deficiency') badgeCls = 'deficiency';
+      if (s.status === 'For Verification' || s.status === 'Pending Submission') badgeCls = 'pending';
+
+      return `
+        <tr>
+          <td style="font-weight:600;">${escapeHtml(s.student_id)}</td>
+          <td>${escapeHtml(s.full_name)}</td>
+          <td>${escapeHtml(s.degree_program)}</td>
+          <td>${s.year_level}</td>
+          <td><span style="font-size:12px; color:var(--muted);">${escapeHtml(progName)}</span></td>
+          <td><span class="badge ${badgeCls}">${escapeHtml(s.status)}</span></td>
+          <td><button class="table-action" data-edit="${s.id}">Edit</button></td>
+        </tr>
+      `;
+    }).join('');
+
+    tbody.querySelectorAll('[data-edit]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = scholars.find(s => String(s.id) === String(btn.dataset.edit));
+        openDialog(item);
+      });
+    });
+  }
+
+  function openDialog(scholar = null) {
+    const form = document.querySelector('#scholar-form');
+    if (!form) return;
     form.reset();
-    modal.classList.add('active');
-  },
 
-  openEditModal(id) {
-    const scholar = this.scholars.find(s => s.id === Number(id));
-    if (!scholar) return;
+    const title = document.querySelector('#scholar-dialog-title');
+    if (title) title.textContent = scholar ? 'Edit scholar' : 'Add scholar';
 
-    document.getElementById('scholarModalTitle').innerText = 'Edit Scholar Record';
-    document.getElementById('scholarEditId').value = scholar.id;
-    document.getElementById('studentIdInput').value = scholar.student_id;
-    document.getElementById('fullNameInput').value = scholar.full_name;
-    document.getElementById('degreeProgramInput').value = scholar.degree_program;
-    document.getElementById('yearLevelInput').value = scholar.year_level;
-    document.getElementById('scholarshipSelect').value = scholar.scholarship_id || '';
-    document.getElementById('scholarStatusSelect').value = scholar.status || 'Active';
+    form.elements.id.value = scholar?.id || '';
+    form.elements.student_id.value = scholar?.student_id || '';
+    form.elements.full_name.value = scholar?.full_name || '';
+    form.elements.degree_program.value = scholar?.degree_program || '';
+    form.elements.year_level.value = scholar?.year_level || '1';
+    form.elements.scholarship_id.value = scholar?.scholarship_id || '';
+    form.elements.status.value = scholar?.status || 'Active';
 
-    document.getElementById('scholarModal').classList.add('active');
-  },
+    const msg = document.querySelector('#scholar-form-message');
+    if (msg) msg.textContent = '';
 
-  bindEvents() {
-    const addBtn = document.getElementById('btnOpenAddScholar');
-    if (addBtn) addBtn.addEventListener('click', () => this.openAddModal());
+    const dialog = document.querySelector('#scholar-dialog');
+    if (dialog?.showModal) dialog.showModal();
+  }
 
-    const form = document.getElementById('scholarForm');
+  document.addEventListener('DOMContentLoaded', () => {
+    // Open Add Scholar Dialog
+    document.querySelector('#new-scholar')?.addEventListener('click', () => openDialog());
+
+    // Close Dialog
+    document.querySelectorAll('[data-close-dialog]').forEach(btn => {
+      btn.addEventListener('click', () => document.querySelector('#scholar-dialog')?.close());
+    });
+
+    // Search and Filter Listeners
+    document.querySelector('#scholar-search')?.addEventListener('input', renderScholars);
+    document.querySelector('#scholarship-filter')?.addEventListener('change', renderScholars);
+    document.querySelector('#status-filter')?.addEventListener('change', renderScholars);
+
+    // Form Submit
+    const form = document.querySelector('#scholar-form');
     if (form) {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const editId = document.getElementById('scholarEditId').value;
-        const studentId = document.getElementById('studentIdInput').value.trim();
-        const fullName = document.getElementById('fullNameInput').value.trim();
-        const degree = document.getElementById('degreeProgramInput').value.trim();
-        const yearLevel = document.getElementById('yearLevelInput').value;
-        const scholarshipId = document.getElementById('scholarshipSelect').value;
-        const status = document.getElementById('scholarStatusSelect').value;
+        const id = form.elements.id.value;
+        const studentId = form.elements.student_id.value.trim();
+        const fullName = form.elements.full_name.value.trim();
+        const degree = form.elements.degree_program.value.trim();
+        const year = parseInt(form.elements.year_level.value, 10);
+        const scholarshipId = form.elements.scholarship_id.value;
+        const status = form.elements.status.value;
+        const msg = document.querySelector('#scholar-form-message');
 
-        // Validations
         if (!studentId) {
-          window.App.showAlert('Student ID cannot be blank.', 'danger');
+          if (msg) msg.textContent = 'Student ID cannot be blank.';
           return;
         }
         if (!scholarshipId) {
-          window.App.showAlert('Scholarship program must be selected.', 'danger');
+          if (msg) msg.textContent = 'Scholarship program must be selected.';
           return;
         }
 
-        // Uniqueness check for student ID
-        const existing = this.scholars.find(s => 
-          s.student_id.toLowerCase() === studentId.toLowerCase() && 
-          (!editId || s.id !== Number(editId))
-        );
-        if (existing) {
-          window.App.showAlert(`Student ID "${studentId}" is already registered.`, 'danger');
-          return;
-        }
-
-        const scholarData = {
+        const record = {
           student_id: studentId,
           full_name: fullName,
           degree_program: degree,
-          year_level: yearLevel,
-          scholarship_id: Number(scholarshipId),
+          year_level: year,
+          scholarship_id: scholarshipId,
           status: status
         };
 
-        if (editId) {
-          await window.DB.updateScholar(editId, scholarData);
-          window.App.showAlert(`Scholar "${fullName}" updated successfully.`, 'success');
-        } else {
-          await window.DB.addScholar(scholarData);
-          window.App.showAlert(`Scholar "${fullName}" registered successfully.`, 'success');
+        const query = id ? window.db.from('scholars').update(record).eq('id', id) : window.db.from('scholars').insert(record);
+        const { error } = await query;
+        if (error) {
+          if (msg) msg.textContent = error.code === '23505' ? 'A scholar with this Student ID already exists.' : error.message;
+          return;
         }
 
-        document.getElementById('scholarModal').classList.remove('active');
-        await this.loadScholars();
+        document.querySelector('#scholar-dialog')?.close();
+        const pageMsg = document.querySelector('#page-message');
+        if (pageMsg) {
+          pageMsg.textContent = 'Scholar record saved successfully.';
+          pageMsg.classList.add('success');
+        }
+        await loadData();
       });
     }
 
-    // Search and Filter Listeners
-    ['scholarSearchInput', 'scholarProgramFilter', 'scholarStatusFilter'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.addEventListener('input', () => this.renderTable());
-        el.addEventListener('change', () => this.renderTable());
-      }
-    });
-  }
-};
+    loadData();
+  });
+})();

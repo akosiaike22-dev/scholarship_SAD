@@ -25,10 +25,10 @@
 
     <form id="login-form">
       <label>Email
-        <input name="email" id="loginEmail" type="email" autocomplete="username" value="staff@scholarship.edu" required>
+        <input name="email" id="loginEmail" type="email" autocomplete="username" required>
       </label>
       <label>Password
-        <input name="password" id="loginPassword" type="password" autocomplete="current-password" value="password123" required>
+        <input name="password" id="loginPassword" type="password" autocomplete="current-password" required>
       </label>
       <button class="button primary full" type="submit" style="margin-top: 6px;">Sign in</button>
       <p id="login-message" class="message" role="alert"></p>
@@ -50,14 +50,16 @@
     function selectRole(role) {
       const emailInput = document.getElementById('loginEmail');
       const passInput = document.getElementById('loginPassword');
-      if (role === 'staff') {
-        emailInput.value = 'staff@scholarship.edu';
-      } else if (role === 'admin') {
-        emailInput.value = 'admin@scholarship.edu';
-      } else if (role === 'scholar') {
-        emailInput.value = 'scholar@scholarship.edu';
+      const roleEmails = {
+        staff: 'staff@gmail.com',
+        admin: 'admin@gmail.com',
+        scholar: 'scholar@gmail.com'
+      };
+      if (roleEmails[role]) {
+        emailInput.value = roleEmails[role];
       }
-      passInput.value = 'password123';
+      passInput.value = '';
+      passInput.focus();
     }
   </script>
 </body>

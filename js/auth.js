@@ -8,13 +8,7 @@
     if (raw) {
       try { return JSON.parse(raw); } catch (e) { /* ignore */ }
     }
-    // Default logged in staff for immediate usability and laboratory demonstration
-    return {
-      id: 'demo-staff-id',
-      email: 'staff@scholarship.edu',
-      full_name: 'Scholarship Staff',
-      role: 'staff'
-    };
+    return null;
   }
 
   function setCurrentUser(user) {
@@ -26,34 +20,24 @@
   }
 
   async function login(email, password) {
-    // If real Supabase client is active, attempt auth
-    if (window.db && window.SUPABASE_URL && !window.SUPABASE_URL.includes('YOUR_PROJECT_ID') && window.supabase) {
-      try {
-        const { data, error } = await window.db.auth.signInWithPassword({ email, password });
-        if (error) return { error };
-        const user = {
-          id: data.user.id,
-          email: data.user.email,
-          role: data.user.email.includes('admin') ? 'admin' : data.user.email.includes('scholar') ? 'scholar' : 'staff',
-          full_name: data.user.email.split('@')[0]
-        };
-        setCurrentUser(user);
-        return { data: user, error: null };
-      } catch (err) {
-        console.warn('Supabase auth failed, using demo auth:', err);
-      }
+    if (!window.db?.auth?.signInWithPassword || !window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
+      return { error: new Error('Supabase authentication is not configured.') };
     }
 
-    // Local / Demo Login
-    const role = email.includes('admin') ? 'admin' : email.includes('scholar') ? 'scholar' : 'staff';
-    const user = {
-      id: 'usr_' + Date.now(),
-      email,
-      role,
-      full_name: email.split('@')[0]
-    };
-    setCurrentUser(user);
-    return { data: user, error: null };
+    try {
+      const { data, error } = await window.db.auth.signInWithPassword({ email, password });
+      if (error) return { error };
+      const user = {
+        id: data.user.id,
+        email: data.user.email,
+        role: data.user.email.includes('admin') ? 'admin' : data.user.email.includes('scholar') ? 'scholar' : 'staff',
+        full_name: data.user.email.split('@')[0]
+      };
+      setCurrentUser(user);
+      return { data: user, error: null };
+    } catch (error) {
+      return { error };
+    }
   }
 
   async function logout() {
